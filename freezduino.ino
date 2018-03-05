@@ -3,7 +3,7 @@
  * Author   : Edgar Solis Vizcarra  
  * Date     : 2018/03/04
  * Modified : 2018/03/05
- * Version  : V0.1.1
+ * Version  : V0.1.2
  * Notes    : Sketch designed for the control of a walk-in freezer evaporator.
  *    It takes input from a temperature sensor and uses it to control
  *    3 relays.
@@ -36,12 +36,13 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
 
 
+
 // Custom characters for the lcd.
 byte thermometer[8] = {
   0b00100,
   0b01010,
   0b01010,
-  0b01110,
+  0b01010,
   0b01110,
   0b10111,
   0b11111,
@@ -75,16 +76,36 @@ void setup() {
   
   // create new characters
   lcd.createChar(0, thermometer);
-  lcd.createChar(1, degree);  
+  lcd.createChar(1, degree);
+}
+
+void writeTemp(int row, int column, bool precise=false){
+  /**
+    * Write the temperature reading from the sensor to the lcd display.
+    * 
+    * It is written LTR starting on the selected row and column.
+    * By default the temperature is rounded, if precise is set to true it is not rounded.
+  **/
+  lcd.setCursor(column, row); // set the cursor to the top row, 1st position
+  lcd.write(byte(0)); // thermometer character
+  if (precise == false){
+    float ftemp = tempsensor.readTempC(); // read temp without rounding
+    lcd.print(ftemp); // write temp
+  }
+  else{
+    int itemp = round(tempsensor.readTempC()); // round temperature reading.
+    lcd.print(itemp); // write temp
+  }
+  lcd.write(byte(1)); // degree character
+  lcd.print("C");
 }
 
 void loop() {
-  lcd.setCursor(0, 0); // set the cursor to the top row, 1st position
-  lcd.write(byte(0)); // thermometer character
-  float c = tempsensor.readTempC(); // read temp
-  lcd.print(c); // write temp
-  lcd.write(byte(1)); // degree character
-  lcd.print("C");
+  writeTemp(0, 0, true);  
+  
+  // While delaying and clearing the display is not completely necessary,
+  // it is kind of useful because the temp changes too fast and, characters are
+  // sticky so they need to be cleared.
   delay(1200);
-  lcd.clear();
+  lcd.clear();  
 }
