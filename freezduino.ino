@@ -1,3 +1,23 @@
+/**
+ * Name     : Freezduino
+ * Author   : Edgar Solis Vizcarra  
+ * Date     : 2018/03/04
+ * Modified : 2018/03/05
+ * Version  : V0.1.1
+ * Notes    : Sketch designed for the control of a walk-in freezer evaporator.
+ *    It takes input from a temperature sensor and uses it to control
+ *    3 relays.
+ *    Relay 1 controls the solenoid valve on the evaporator that makes the
+ *    freezer compressor turn on and off.
+ *    Relay 2 controls the fans that push air throught the freezer diffusor.
+ *    Relay 3 controls the heating elements that defrost the diffusor at the
+ *    time intervals set by the user.
+ *    
+ *    A 16x2 LCD display and 3 buttons are used for user interaction.
+ *    
+ *    There's also an on/off button
+**/
+
 #include <LiquidCrystal.h>
 #include <Wire.h>
 #include "Adafruit_MCP9808.h"
@@ -8,8 +28,8 @@ const int rs = 12, en = 11, d4 = 5, d5 = 4, d6 = 3, d7 = 2;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 // initialize the temp sensor library, as it connects via I2C the pins are defined in the library.
-// SCL = A5
-// SDA = A4
+// SCL = A5 on UNO || D21 on MEGA
+// SDA = A4 on UNO || D20 on MEGA
 // vdd = 5v
 // gnd = gnd
 // the other pins are not needed.
