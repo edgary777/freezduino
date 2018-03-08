@@ -3,7 +3,7 @@
    Author   : Edgar Solis Vizcarra
    Date     : 2018/03/04
    Modified : 2018/03/05
-   Version  : V0.1.2
+   Version  : V0.2.1
    Notes    : Sketch designed for the control of a walk-in freezer evaporator.
       It takes input from a temperature sensor and uses it to control
       3 relays.
@@ -70,6 +70,9 @@ int subMenuCurrent = 0;
 
 // Temporary setpoint copy storage, this copy is the one you interact with the screen and the real setpoint is set after you leave.
 int newSetpoint = setpoint;
+
+// Temporary tolerance copy storage, this copy is the one you interact with the screen and the real tolerance is set after you leave.
+int newTolerance = tolerance;
 
 // When there's a change in a submenu this sets it to be updated.
 bool dirtySubMenu = true;
@@ -149,6 +152,17 @@ byte arrow[8] = {
   0b11000
 };
 
+byte toleranceC[8]{  
+  0b00100,
+  0b01110,
+  0b00100,
+  0b00000,
+  0b11111,
+  0b00000,
+  0b01110,
+  0b00000
+};
+
 void setup() {
   Serial.begin(9600);
   pinMode(Rcompressor, OUTPUT);
@@ -183,11 +197,15 @@ void setup() {
   lcd.createChar(3, defrosting);
   lcd.createChar(4, timer);
   lcd.createChar(5, arrow);
+  lcd.createChar(6, toleranceC);
 }
+
+
 //This controls how often we check for input from the buttons first value is in ms second is callback function
 TimedAction lcdTempThread = TimedAction(refreshRate, lcdTemp);
 TimedAction lcdDefrosterThread = TimedAction(refreshRate / 2, lcdDefrost);
 TimedAction lcdEvaporatorThread = TimedAction(refreshRate / 2, lcdEvaporator);
+
 
 void tempControl(int setpoint, int tolerance) {
   /**
@@ -318,22 +336,40 @@ void killAll() {
 }
 
 void updateTempPos(int column, int row, bool precise) {
+  /*
+   * Because the temperature is shown and updated with a timer,
+   * and because it can be reused, calling this function will
+   * set it to the set position.
+   */
   lcdTempColumn = column;
   lcdTempRow = row;
   lcdTempPrecise = precise;
 }
 
 void updateEvaporatorPos(int column, int row) {
+  /*
+   * Because the evaporator state is shown and updated with a timer,
+   * and because it can be reused, calling this function will
+   * set it to the set position.
+   */
   lcdEvaporatorColumn = column;
   lcdEvaporatorRow = row;
 }
 
 void updateDefrosterPos(int column, int row) {
+  /*
+   * Because the defroster state is shown and updated with a timer,
+   * and because it can be reused, calling this function will
+   * set it to the set position.
+   */
   lcdDefrosterColumn = column;
   lcdDefrosterRow = row;
 }
 
 void homeScreen() {
+  /*
+   * Update the homescreen data.
+   */
   updateTempPos(0, 0, true);
   updateEvaporatorPos(12, 0);
   updateDefrosterPos(0, 1);
@@ -344,10 +380,10 @@ void homeScreen() {
 
 void setpointConfig() {
   /*
-     Display and interact with the temperature setpoint on the LCD display.
-
-     newSetpoint is a temporary copy of the real setpoint, the real setpoint is only updated
-     after you leave the menu so you don't change the temp in real time.
+   * Display and interact with the temperature setpoint on the LCD display.
+   *
+   * newSetpoint is a temporary copy of the real setpoint, the real setpoint is only updated
+   * after you leave the menu so you don't change the temp in real time.
   */
   if (dirtySubMenu == true) {
     lcd.clear();
@@ -360,25 +396,37 @@ void setpointConfig() {
   }
 }
 
+void toleranceConfig() {
+  if (dirtySubMenu == true) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.write(byte(6));
+    lcd.print(newTolerance);
+    lcd.write(byte(1));
+    lcd.print("C");
+    dirtySubMenu = false;
+  }  
+}
+
 void menuScreen(int top, int current) {
   /**
-     Menu with options to change settings.
-
-     parameters:
-     - top: signals the message that is on the top of the screen.
-     - current: signals the message that is currently selected.
-
-     We always start with 0, 0
-
-     0- return
-     1- setpoint
-     2- tolerance
-     3- defrost time
-     4- toggle fans
-     5- toggle evaporator
-     6- toggle defroster
-     7- shutdown
-  */
+   * Menu with options to change settings.
+   *
+   * parameters:
+   * - top: signals the message that is on the top of the screen.
+   * - current: signals the message that is currently selected.
+   *
+   * We always start with 0, 0
+   *
+   * 0- return
+   * 1- setpoint
+   * 2- tolerance
+   * 3- defrost time
+   * 4- toggle fans
+   * 5- toggle evaporator
+   * 6- toggle defroster
+   * 7- shutdown
+   */
   if (dirtyMenu == true) {
     char message [8][15] = {"REGRESAR", "TEMPERATURA", "TOLERANCIA", "TIEMPO DESCONG", "VENTILADORES", "DIFUSOR", "DESCONGELAR", "APAGAR"};
 
@@ -397,10 +445,10 @@ void menuScreen(int top, int current) {
 
 void button1() {
   /**
-     This button does many things.
-     1- Get in the mainMenu from the home screen
-     2- Act as a click to interact with the menus and submenus options inside.
-     If button is pressed deactivate for 200 ms.
+   * This button does many things.
+   * 1- Get in the mainMenu from the home screen
+   * 2- Act as a click to interact with the menus and submenus options inside.
+   * If button is pressed deactivate for 200 ms.
   */
   if (b1Millis <= millis()) {
     if (digitalRead(b1Pin) == HIGH) {
@@ -418,6 +466,8 @@ void button1() {
             break;
           case 2:
             // TOLERANCE CONFIG
+            activeSubMenu = 2;
+            newTolerance = tolerance;
             break;
           case 3:
             // DEFROST CONFIG
@@ -446,6 +496,9 @@ void button1() {
             break;
           case 2:
             // INTERACT WITH TOLERANCE CONFIG
+            tolerance = newTolerance;
+            activeSubMenu = 0;
+            dirtySubMenu = true;
             break;
           case 3:
             // INTERACT WITH DEFROST CONFIG
@@ -471,10 +524,10 @@ void button1() {
 
 void button2() {
   /**
-     This button moves down the current menu.
-
-     If button is pressed deactivate for 200 ms.
-  */
+   *This button moves down the current menu.
+   *
+   *If button is pressed deactivate for 200 ms.
+   */
   if (b2Millis <= millis()) {
     if (digitalRead(b2Pin) == HIGH) {
       b2Millis = millis() + 500;
@@ -500,6 +553,8 @@ void button2() {
             break;
           case 2:
             // INTERACT WITH TOLERANCE CONFIG
+            newTolerance = newTolerance - 1;
+            dirtySubMenu = true;
             break;
           case 3:
             // INTERACT WITH DEFROST CONFIG
@@ -554,6 +609,8 @@ void button3() {
             break;
           case 2:
             // TOLERANCE CONFIG
+            newTolerance = newTolerance + 1;
+            dirtySubMenu = true;
             break;
           case 3:
             // DEFROST CONFIG
@@ -594,8 +651,13 @@ void showSubMenu(){
    */
   switch(activeSubMenu){
     case 1:
-    // Setpoint config.
-    setpointConfig();
+      // Setpoint config.
+      setpointConfig();
+      break;
+    case 2:
+      // Tolerance config.
+      toleranceConfig();
+      break;
   }
 }
 
