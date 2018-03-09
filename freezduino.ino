@@ -22,6 +22,7 @@
 #include <Wire.h>
 #include "Adafruit_MCP9808.h"
 #include <TimedAction.h>
+#include <EEPROM.h>
 
 //Refresh rate for the display data.
 unsigned long refreshRate = 800;
@@ -37,10 +38,9 @@ int mainMenuCurrent = 0;
 const int b1Pin = 24, b2Pin = 28, b3Pin = 32, b4Pin = 36;
 const int Rcompressor = 6, Rfans = 7, Rdefroster = 8;
 
-int setpoint = 25, tolerance = 2;
-
+int setpoint = (int8_t)EEPROM.read(0), tolerance = (int8_t)EEPROM.read(1);
 // defrostDuration indicates minutes, defrostFrequency indicates hours.
-unsigned int defrostDuration = 30, defrostFrequency = 8;
+unsigned int defrostDuration = EEPROM.read(2), defrostFrequency = EEPROM.read(3);
 
 //Everytime we restart, everything must be set off.
 bool evaporator = false, defroster = false, fans = false;
@@ -198,6 +198,27 @@ byte toleranceC[8]{
 
 void setup() {
   Serial.begin(9600);
+
+  // Initial EEPROM setup.
+  if (EEPROM.read(0) == 255){
+    // Setpoint
+    EEPROM.write(0, -25);
+    // Tolerance
+    EEPROM.write(1, 2);
+    // Defroster Duration
+    EEPROM.write(2, 30);
+    // Defroster Frequency
+    EEPROM.write(3, 8);
+  }
+    // Negative values can be stored rather easily, but reading
+    // them requires we read them slightly differently.
+    int value = (int8_t)EEPROM.read(0);
+    Serial.println(value);
+    Serial.println(EEPROM.read(1));
+    Serial.println(EEPROM.read(2));
+    Serial.println(EEPROM.read(3));
+
+  
   pinMode(Rcompressor, OUTPUT);
   digitalWrite(Rcompressor, HIGH);
   pinMode(Rfans, OUTPUT);
@@ -751,24 +772,28 @@ void button1() {
           case 1:
             // INTERACT WITH SETPOINT CONFIG
             setpoint = newSetpoint;
+            EEPROM.update(0, setpoint);
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
           case 2:
             // INTERACT WITH TOLERANCE CONFIG
             tolerance = newTolerance;
+            EEPROM.update(1, tolerance);
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
           case 3:
             // INTERACT WITH DEFROST TIME CONFIG
             defrostDuration = newDefrostDuration;
+            EEPROM.update(2, defrostDuration);
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
           case 4:
             // DEFROST FREQUENCY CONFIG
             defrostFrequency = newDefrostFrequency;
+            EEPROM.update(3, defrostFrequency);
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
