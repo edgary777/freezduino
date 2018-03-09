@@ -3,7 +3,7 @@
    Author   : Edgar Solis Vizcarra
    Date     : 2018/03/04
    Modified : 2018/03/05
-   Version  : V0.2.2
+   Version  : V0.2.3
    Notes    : Sketch designed for the control of a walk-in freezer evaporator.
       It takes input from a temperature sensor and uses it to control
       3 relays.
@@ -43,7 +43,7 @@ int setpoint = 25, tolerance = 2;
 unsigned int defrostDuration = 30, defrostFrequency = 8;
 
 //Everytime we restart, everything must be set off.
-bool evaporator = false, defroster = false;
+bool evaporator = false, defroster = false, fans = false;
 
 //global variables to write the temp on the lcdscreen
 int lcdTempRow, lcdTempColumn;
@@ -84,6 +84,28 @@ int newDefrostDuration = defrostDuration;
 
 // Temporary defrostFrequency copy storage, this copy is the one you interact with the screen and the real defrostFrequency is set after you leave.
 int newDefrostFrequency = defrostFrequency;
+
+// Temporary state change for the fans, this state will not be saved, only temporarily used for testing
+bool tempFansState;
+// Temporarily force the the fans to the temp state.
+// it is an int because I needed a 3rd state, that state is used whenever outside the submenu
+// 0 = false, 1 = true, 2 = none
+int forceFans = 2;
+
+// Temporary state change for the fans, this state will not be saved, only temporarily used for testing
+bool tempEvaporatorState;
+// Temporarily force the the evaporator to the temp state.
+// it is an int because I needed a 3rd state, that state is used whenever outside the submenu
+// 0 = false, 1 = true, 2 = none
+int forceEvaporator = 2;
+
+// Temporary state change for the fans, this state will not be saved, only temporarily used for testing
+bool tempDefrosterState;
+// Temporarily force the the defroster to the temp state.
+// it is an int because I needed a 3rd state, that state is used whenever outside the submenu
+// 0 = false, 1 = true, 2 = none
+int forceDefroster = 2;
+
 
 // When there's a change in a submenu this sets it to be updated.
 bool dirtySubMenu = true;
@@ -226,17 +248,15 @@ void tempControl(int setpoint, int tolerance) {
   */
   int temp = round(tempsensor.readTempC()); // round temperature reading.
   if (temp <= setpoint + tolerance) {
-    digitalWrite(Rcompressor, LOW);
-    digitalWrite(Rfans, LOW);
     evaporator = true;
+    fans = true;
   } else {
-    digitalWrite(Rcompressor, HIGH);
-    digitalWrite(Rfans, HIGH);
     evaporator = false;
+    fans = false;
   }
 }
 
-void defrost(bool order = false) {
+void defrost(bool state = false) {
   /**
      Activate the defrosting function.
 
@@ -245,14 +265,87 @@ void defrost(bool order = false) {
      it must stay like this for the set duration or until the user decides to
      cancel the defrosting.
   */
-  if (order == true) {
-    digitalWrite(Rdefroster, HIGH);
+  if (state == true) {
     defroster = true;
   }
   else {
     defroster = false;
-    digitalWrite(Rdefroster, LOW);
   }
+}
+
+void fansController(){
+  /*
+   * Controls the relay of the evaporator.
+   */
+  if (forceFans != 2){
+    if (forceFans == 1) {
+      digitalWrite(Rfans, LOW);
+    }
+    else{
+      digitalWrite(Rfans, HIGH);
+    }
+  }
+  else{
+    if (fans == true) {
+      digitalWrite(Rfans, LOW);
+    }
+    else{
+      digitalWrite(Rfans, HIGH);
+    }    
+  }
+}
+
+void evaporatorController(){
+  /*
+   * Controls the relay of the evaporator.
+   */
+  if (forceEvaporator != 2){
+    if (forceEvaporator == 1) {
+      digitalWrite(Rcompressor, LOW);
+    }
+    else{
+      digitalWrite(Rcompressor, HIGH);
+    }
+  }
+  else{
+    if (evaporator == true) {
+      digitalWrite(Rcompressor, LOW);
+    }
+    else{
+      digitalWrite(Rcompressor, HIGH);
+    }    
+  }
+}
+
+void defrosterController(){
+  /*
+   * Controls the relay of the evaporator.
+   */
+  if (forceDefroster != 2){
+    if (forceDefroster == 1) {
+      digitalWrite(Rdefroster, LOW);
+    }
+    else{
+      digitalWrite(Rdefroster, HIGH);
+    }
+  }
+  else{
+    if (defroster == true) {
+      digitalWrite(Rdefroster, LOW);
+    }
+    else{
+      digitalWrite(Rdefroster, HIGH);
+    }    
+  }
+}
+
+void relaysController(){
+  /*
+   * Handles the updating of the relays states.
+   */
+   fansController();
+   evaporatorController();
+   defrosterController();
 }
 
 void lcdEvaporator(int row, int column) {
@@ -459,6 +552,87 @@ void defrostFrequencyConfig(){
   }  
 }
 
+void fansState(){
+  /**
+   * Display and interact with the fans state on the LCD display.
+   * 
+   * For safety reasons no part of the system can be left to be forced neither ON nor OFF
+   * by the user for indefinite spans of time.
+   * This is only meant to be used as a short test and when the user exits
+   * the submenu the control of this will be taken back by the system.
+   * 
+   * Submenus can only last open for a maximum of 3 minutes.
+   * 
+   * THIS FEATURE WILL MOST LIKELY BE REMOVED ON THE RELEASE VERSION.
+   */  
+  if (dirtySubMenu == true) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.write(byte(2));
+    if (forceFans == 0) {
+      lcd.write("OFF");
+    }
+    else {
+      lcd.write("ON ");
+    }
+    dirtySubMenu = false;
+  }  
+}
+
+void evaporatorState(){
+  /**
+   * Display and interact with the evaporator state on the LCD display.
+   * 
+   * For safety reasons no part of the system can be left to be forced neither ON nor OFF
+   * by the user for indefinite spans of time.
+   * This is only meant to be used as a short test and when the user exits
+   * the submenu the control of this will be taken back by the system.
+   * 
+   * Submenus can only last open for a maximum of 3 minutes.
+   * 
+   * THIS FEATURE WILL MOST LIKELY BE REMOVED ON THE RELEASE VERSION.
+   */  
+  if (dirtySubMenu == true) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.write(byte(2));
+    if (forceEvaporator == 0) {
+      lcd.write("OFF");
+    }
+    else {
+      lcd.write("ON ");
+    }
+    dirtySubMenu = false;
+  }  
+}
+
+void defrosterState(){
+  /**
+   * Display and interact with the defroster state on the LCD display.
+   * 
+   * For safety reasons no part of the system can be left to be forced neither ON nor OFF
+   * by the user for indefinite spans of time.
+   * This is only meant to be used as a short test and when the user exits
+   * the submenu the control of this will be taken back by the system.
+   * 
+   * Submenus can only last open for a maximum of 3 minutes.
+   * 
+   * THIS FEATURE WILL MOST LIKELY BE REMOVED ON THE RELEASE VERSION.
+   */  
+  if (dirtySubMenu == true) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.write(byte(0));
+    if (forceDefroster == 0) {
+      lcd.write("OFF");
+    }
+    else {
+      lcd.write("ON ");
+    }
+    dirtySubMenu = false;
+  }  
+}
+
 void menuScreen(int top, int current) {
   /**
    * Menu with options to change settings.
@@ -535,12 +709,35 @@ void button1() {
             break;
           case 5:
             // FORCE FANS ON/OFF
+            if (fans == true){
+              forceFans = 1;
+            }
+            else {
+              forceFans = 0;
+            }
+            activeSubMenu = 5;
             break;
           case 6:
             // FORCE EVAPORATOR ON/OFF
+            if (evaporator == true){
+              forceEvaporator = 1;
+            }
+            else {
+              forceEvaporator = 0;
+            }
+            tempEvaporatorState = evaporator;
+            activeSubMenu = 6;
             break;
           case 7:
             // FORCE DEFROST ON/OFF
+            if (fans == true){
+              forceDefroster = 1;
+            }
+            else {
+              forceDefroster = 0;
+            }
+            tempDefrosterState = defroster;
+            activeSubMenu = 7;
             break;
           case 8:
             // SHUTDOWN
@@ -577,12 +774,21 @@ void button1() {
             break;
           case 5:
             // FORCE FANS ON/OFF
+            forceFans = 2;
+            activeSubMenu = 0;
+            dirtySubMenu = true;
             break;
           case 6:
             // FORCE EVAPORATOR ON/OFF
+            forceEvaporator = 2;
+            activeSubMenu = 0;
+            dirtySubMenu = true;
             break;
           case 7:
             // FORCE DEFROST ON/OFF
+            forceDefroster = 2;
+            activeSubMenu = 0;
+            dirtySubMenu = true;
             break;
           case 8:
             // SHUTDOWN
@@ -646,12 +852,33 @@ void button2() {
             break;
           case 5:
             // FORCE FANS ON/OFF
+            if (forceFans == 1) {
+              forceFans = 0;
+            }
+            else {
+              forceFans = 1;
+            }
+            dirtySubMenu = true;
             break;
           case 6:
             // FORCE EVAPORATOR ON/OFF
+            if (forceEvaporator == 1) {
+              forceEvaporator = 0;
+            }
+            else {
+              forceEvaporator = 1;
+            }
+            dirtySubMenu = true;
             break;
           case 7:
             // FORCE DEFROST ON/OFF
+            if (forceDefroster == 1) {
+              forceDefroster = 0;
+            }
+            else {
+              forceDefroster = 1;
+            }
+            dirtySubMenu = true;
             break;
           case 8:
             // SHUTDOWN
@@ -716,12 +943,33 @@ void button3() {
             break;
           case 5:
             // FORCE FANS ON/OFF
+            if (forceFans == 1) {
+              forceFans = 0;
+            }
+            else {
+              forceFans = 1;
+            }
+            dirtySubMenu = true;
             break;
           case 6:
             // FORCE EVAPORATOR ON/OFF
+            if (forceEvaporator == 1) {
+              forceEvaporator = 0;
+            }
+            else {
+              forceEvaporator = 1;
+            }
+            dirtySubMenu = true;
             break;
           case 7:
             // FORCE DEFROST ON/OFF
+            if (forceDefroster == 1) {
+              forceDefroster = 0;
+            }
+            else {
+              forceDefroster = 1;
+            }
+            dirtySubMenu = true;
             break;
           case 8:
             // SHUTDOWN
@@ -765,11 +1013,24 @@ void showSubMenu(){
       // Tolerance config.
       defrostFrequencyConfig();
       break;
+    case 5:
+      // Tolerance config.
+      fansState();
+      break;
+    case 6:
+      // Tolerance config.
+      evaporatorState();
+      break;
+    case 7:
+      // Tolerance config.
+      defrosterState();
+      break;
   }
 }
 
 void loop() {
   tempControl(setpoint, tolerance);
+  relaysController();
   button1();
   if (menuOn == true) {
     if (activeSubMenu == 0) {
