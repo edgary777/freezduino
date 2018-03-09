@@ -3,7 +3,7 @@
    Author   : Edgar Solis Vizcarra
    Date     : 2018/03/04
    Modified : 2018/03/05
-   Version  : V0.2.1
+   Version  : V0.2.2
    Notes    : Sketch designed for the control of a walk-in freezer evaporator.
       It takes input from a temperature sensor and uses it to control
       3 relays.
@@ -37,7 +37,12 @@ int mainMenuCurrent = 0;
 const int b1Pin = 24, b2Pin = 28, b3Pin = 32, b4Pin = 36;
 const int Rcompressor = 6, Rfans = 7, Rdefroster = 8;
 
-int setpoint = 25, tolerance = 2, defrostDuration = 30;
+int setpoint = 25, tolerance = 2;
+
+// defrostDuration indicates minutes, defrostFrequency indicates hours.
+unsigned int defrostDuration = 30, defrostFrequency = 8;
+
+//Everytime we restart, everything must be set off.
 bool evaporator = false, defroster = false;
 
 //global variables to write the temp on the lcdscreen
@@ -73,6 +78,12 @@ int newSetpoint = setpoint;
 
 // Temporary tolerance copy storage, this copy is the one you interact with the screen and the real tolerance is set after you leave.
 int newTolerance = tolerance;
+
+// Temporary defrostDuration copy storage, this copy is the one you interact with the screen and the real defrostDuration is set after you leave.
+int newDefrostDuration = defrostDuration;
+
+// Temporary defrostFrequency copy storage, this copy is the one you interact with the screen and the real defrostFrequency is set after you leave.
+int newDefrostFrequency = defrostFrequency;
 
 // When there's a change in a submenu this sets it to be updated.
 bool dirtySubMenu = true;
@@ -131,13 +142,13 @@ byte defrosting[8] = {
 };
 
 byte timer[8] = {
-  0b00000,
-  0b00000,
   0b01110,
   0b10101,
   0b10111,
   0b10001,
   0b01110,
+  0b00000,
+  0b00000,
   0b00000
 };
 
@@ -397,6 +408,12 @@ void setpointConfig() {
 }
 
 void toleranceConfig() {
+  /**
+   * Display and interact with the tolerance config on the LCD display.
+   * 
+   * newTolerance is a temporary copy of the real tolerance, the real tolerance is only updated
+   * after you leave the submenu so you don't change the tolerance in real time.
+   */
   if (dirtySubMenu == true) {
     lcd.clear();
     lcd.setCursor(0, 0);
@@ -404,6 +421,40 @@ void toleranceConfig() {
     lcd.print(newTolerance);
     lcd.write(byte(1));
     lcd.print("C");
+    dirtySubMenu = false;
+  }  
+}
+
+void defrostDurationConfig(){
+  /**
+   * Display and interact with the defrostDuration config on the LCD display.
+   * 
+   * newDefrostDuration is a temporary copy of the real defrostDuration, the real defrostDuration is only updated
+   * after you leave the submenu so you don't change the defrostDuration in real time.
+   */
+  if (dirtySubMenu == true) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.write(byte(4));
+    lcd.print(newDefrostDuration);
+    lcd.print(" MINUTOS");
+    dirtySubMenu = false;
+  }  
+}
+
+void defrostFrequencyConfig(){
+  /**
+   * Display and interact with the defrostFrequency config on the LCD display.
+   * 
+   * newDefrostFrequency is a temporary copy of the real defrostFrequencyuration, the real defrostFrequency is only updated
+   * after you leave the submenu so you don't change the defrostFrequency in real time.
+   */
+  if (dirtySubMenu == true) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.write(byte(4));
+    lcd.print(newDefrostFrequency);
+    lcd.print(" HORAS");
     dirtySubMenu = false;
   }  
 }
@@ -422,13 +473,14 @@ void menuScreen(int top, int current) {
    * 1- setpoint
    * 2- tolerance
    * 3- defrost time
-   * 4- toggle fans
-   * 5- toggle evaporator
-   * 6- toggle defroster
-   * 7- shutdown
+   * 4- defrost frequency
+   * 5- toggle fans
+   * 6- toggle evaporator
+   * 7- toggle defroster
+   * 8- shutdown
    */
   if (dirtyMenu == true) {
-    char message [8][15] = {"REGRESAR", "TEMPERATURA", "TOLERANCIA", "TIEMPO DESCONG", "VENTILADORES", "DIFUSOR", "DESCONGELAR", "APAGAR"};
+    char message [9][15] = {"REGRESAR", "TEMPERATURA", "TOLERANCIA", "TIEMPO DESCONG", "DESCONGELA CADA", "VENTILADORES", "DIFUSOR", "DESCONGELAR", "APAGAR"};
 
     lcd.clear();
     lcd.setCursor(1, 0);
@@ -454,6 +506,8 @@ void button1() {
     if (digitalRead(b1Pin) == HIGH) {
       b1Millis = millis() + 500;
       if (activeSubMenu == 0){
+        // If activeSubMenu == 0, this means that we are not in any submenu,
+        // therefore, we are in the main menu and the button will act as a menu selector.
         switch (mainMenuCurrent) {
           case 0:
             // RETURN TO HOME
@@ -470,23 +524,32 @@ void button1() {
             newTolerance = tolerance;
             break;
           case 3:
-            // DEFROST CONFIG
+            // DEFROST TIME CONFIG
+            activeSubMenu = 3;
+            newDefrostDuration = defrostDuration;
             break;
           case 4:
-            // FORCE FANS ON/OFF
+            // DEFROST FREQUENCY CONFIG
+            activeSubMenu = 4;
+            newDefrostFrequency = defrostFrequency;
             break;
           case 5:
-            // FORCE EVAPORATOR ON/OFF
+            // FORCE FANS ON/OFF
             break;
           case 6:
-            // FORCE DEFROST ON/OFF
+            // FORCE EVAPORATOR ON/OFF
             break;
           case 7:
+            // FORCE DEFROST ON/OFF
+            break;
+          case 8:
             // SHUTDOWN
             break;
         }
       }
       else{
+        // If we are here that means that we are in a subMenu, and the button
+        // will therefore behave as a config saver.
         switch (activeSubMenu) {
           case 1:
             // INTERACT WITH SETPOINT CONFIG
@@ -501,18 +564,27 @@ void button1() {
             dirtySubMenu = true;
             break;
           case 3:
-            // INTERACT WITH DEFROST CONFIG
+            // INTERACT WITH DEFROST TIME CONFIG
+            defrostDuration = newDefrostDuration;
+            activeSubMenu = 0;
+            dirtySubMenu = true;
             break;
           case 4:
-            // FORCE FANS ON/OFF
+            // DEFROST FREQUENCY CONFIG
+            defrostFrequency = newDefrostFrequency;
+            activeSubMenu = 0;
+            dirtySubMenu = true;
             break;
           case 5:
-            // FORCE EVAPORATOR ON/OFF
+            // FORCE FANS ON/OFF
             break;
           case 6:
-            // FORCE DEFROST ON/OFF
+            // FORCE EVAPORATOR ON/OFF
             break;
           case 7:
+            // FORCE DEFROST ON/OFF
+            break;
+          case 8:
             // SHUTDOWN
             break;
         }
@@ -530,7 +602,11 @@ void button2() {
    */
   if (b2Millis <= millis()) {
     if (digitalRead(b2Pin) == HIGH) {
+      // This is the time the button will be inactive.
       b2Millis = millis() + 500;
+
+      // If activeSubMenu == 0, this means that we are not in any submenu,
+      // therefore, we are in the main menu and the button will act as a selector mover.
       if (activeSubMenu == 0) {
         if (mainMenuCurrent - mainMenuTop != 0) {
           if (mainMenuTop < 7) {
@@ -545,6 +621,8 @@ void button2() {
         }
       }
       else{
+        // If we are here that means we are in a submenu,
+        // The button will therefore behave as a config editor.
         switch (activeSubMenu) {
           case 1:
             // INTERACT WITH SETPOINT CONFIG
@@ -557,18 +635,25 @@ void button2() {
             dirtySubMenu = true;
             break;
           case 3:
-            // INTERACT WITH DEFROST CONFIG
+            // INTERACT WITH DEFROST TIME CONFIG
+            newDefrostDuration = newDefrostDuration - 1;
+            dirtySubMenu = true;
             break;
           case 4:
-            // FORCE FANS ON/OFF
+            // DEFROST FREQUENCY CONFIG
+            newDefrostFrequency = newDefrostFrequency - 1;
+            dirtySubMenu = true;
             break;
           case 5:
-            // FORCE EVAPORATOR ON/OFF
+            // FORCE FANS ON/OFF
             break;
           case 6:
-            // FORCE DEFROST ON/OFF
+            // FORCE EVAPORATOR ON/OFF
             break;
           case 7:
+            // FORCE DEFROST ON/OFF
+            break;
+          case 8:
             // SHUTDOWN
             break;
         }
@@ -586,7 +671,11 @@ void button3() {
   */
   if (b3Millis <= millis()) {
     if (digitalRead(b3Pin) == HIGH) {
+      // This is the time the button will be inactive.
       b3Millis = millis() + 500;
+
+      // If activeSubMenu == 0, this means that we are not in any submenu,
+      // therefore, we are in the main menu and the button will act as a selector mover.
       if (activeSubMenu == 0){
         if (mainMenuCurrent - mainMenuTop == 0) {
           if (mainMenuTop > 0) {
@@ -599,8 +688,11 @@ void button3() {
         if (mainMenuTop - mainMenuCurrent != 0) {
           mainMenuCurrent = mainMenuCurrent - 1;
         }
+
       }
       else {
+        // If we are here that means we are in a submenu,
+        // The button will therefore behave as a config editor.
         switch (activeSubMenu) {
           case 1:
             // SETPOINT CONFIG
@@ -613,18 +705,25 @@ void button3() {
             dirtySubMenu = true;
             break;
           case 3:
-            // DEFROST CONFIG
+            // INTERACT WITH DEFROST TIME CONFIG
+            newDefrostDuration = newDefrostDuration + 1;
+            dirtySubMenu = true;
             break;
           case 4:
-            // FORCE FANS ON/OFF
+            // DEFROST FREQUENCY CONFIG
+            newDefrostFrequency = newDefrostFrequency + 1;
+            dirtySubMenu = true;
             break;
           case 5:
-            // FORCE EVAPORATOR ON/OFF
+            // FORCE FANS ON/OFF
             break;
           case 6:
-            // FORCE DEFROST ON/OFF
+            // FORCE EVAPORATOR ON/OFF
             break;
           case 7:
+            // FORCE DEFROST ON/OFF
+            break;
+          case 8:
             // SHUTDOWN
             break;
         }
@@ -657,6 +756,14 @@ void showSubMenu(){
     case 2:
       // Tolerance config.
       toleranceConfig();
+      break;
+    case 3:
+      // Tolerance config.
+      defrostDurationConfig();
+      break;
+    case 4:
+      // Tolerance config.
+      defrostFrequencyConfig();
       break;
   }
 }
