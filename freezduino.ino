@@ -2,8 +2,8 @@
    Name     : Freezduino
    Author   : Edgar Solis Vizcarra
    Date     : 2018/03/04
-   Modified : 2018/03/05
-   Version  : V0.2.3
+   Modified : 2018/03/09
+   Version  : V0.3.0
    Notes    : Sketch designed for the control of a walk-in freezer evaporator.
       It takes input from a temperature sensor and uses it to control
       3 relays.
@@ -105,6 +105,12 @@ bool tempDefrosterState;
 // it is an int because I needed a 3rd state, that state is used whenever outside the submenu
 // 0 = false, 1 = true, 2 = none
 int forceDefroster = 2;
+
+unsigned long evaporatorStopAt, defrosterStopAt;
+bool newCycleState, newCurrentAction;
+bool cycleState = false;
+// This signals the current action being executed by the cycler, false = evaporator, true = defroster
+bool currentAction = true;
 
 
 // When there's a change in a submenu this sets it to be updated.
@@ -218,7 +224,6 @@ void setup() {
     Serial.println(EEPROM.read(2));
     Serial.println(EEPROM.read(3));
 
-  
   pinMode(Rcompressor, OUTPUT);
   digitalWrite(Rcompressor, HIGH);
   pinMode(Rfans, OUTPUT);
@@ -261,19 +266,25 @@ TimedAction lcdDefrosterThread = TimedAction(refreshRate / 2, lcdDefrost);
 TimedAction lcdEvaporatorThread = TimedAction(refreshRate / 2, lcdEvaporator);
 
 
-void tempControl(int setpoint, int tolerance) {
+void tempControl(bool state = true) {
   /**
      Check temperature, if it is at the setpoint or lower, or higher but within
      the tolerance then turn relay off. If it is higher than the setpoint + the
      tolerance then turn the relay on.
   */
-  int temp = round(tempsensor.readTempC()); // round temperature reading.
-  if (temp <= setpoint + tolerance) {
-    evaporator = true;
-    fans = true;
-  } else {
-    evaporator = false;
-    fans = false;
+  if (state == true){
+    int temp = round(tempsensor.readTempC()); // round temperature reading.
+    if (temp <= setpoint + tolerance) {
+      evaporator = true;
+      fans = true;
+    } else {
+      evaporator = false;
+      fans = false;
+    }
+  }
+  else{
+      evaporator = false;
+      fans = false;    
   }
 }
 
@@ -503,6 +514,52 @@ void homeScreen() {
   lcdDefrosterThread.check();
 }
 
+void startConfig() {
+  /*
+   * Display and interact with the state of the cycle.
+   *
+   * newCycleState is a temporary copy of the real cycleState, the real cycleState is only updated
+   * after you leave the menu so you don't change the cycleState in real time.
+  */
+  if (dirtySubMenu == true) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("ESTADO");
+    if (newCycleState == true){
+      lcd.setCursor(3, 1);
+      lcd.print("TRABAJANDO");
+    }
+    else{
+      lcd.setCursor(5, 1);
+      lcd.print("APAGADO");
+    }
+    dirtySubMenu = false;
+  }
+}
+
+void currentActionConfig() {
+  /*
+   * Display and interact with the state of the currentAction.
+   *
+   * newCurrentAction is a temporary copy of the real currentAction, the real currentAction is only updated
+   * after you leave the menu so you don't change the currentAction in real time.
+  */
+  if (dirtySubMenu == true) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("ACCION ACTUAL");
+    if (newCurrentAction == false) {
+      lcd.setCursor(4, 1);
+      lcd.print("CONGELANDO");
+    }
+    else{
+      lcd.setCursor(3, 1);
+      lcd.print("DESCONGELANDO");
+    }
+  }
+  dirtySubMenu = false;
+}
+
 void setpointConfig() {
   /*
    * Display and interact with the temperature setpoint on the LCD display.
@@ -675,7 +732,7 @@ void menuScreen(int top, int current) {
    * 8- shutdown
    */
   if (dirtyMenu == true) {
-    char message [9][15] = {"REGRESAR", "TEMPERATURA", "TOLERANCIA", "TIEMPO DESCONG", "DESCONGELA CADA", "VENTILADORES", "DIFUSOR", "DESCONGELAR", "APAGAR"};
+    char message [11][15] = {"REGRESAR", "INICIAR", "CAMBIAR ACCION", "TEMPERATURA", "TOLERANCIA", "TIEMPO DESCONG", "DESCONGELA CADA", "VENTILADORES", "DIFUSOR", "DESCONGELAR", "APAGAR"};
 
     lcd.clear();
     lcd.setCursor(1, 0);
@@ -688,7 +745,6 @@ void menuScreen(int top, int current) {
     dirtyMenu = false;
   }
 }
-
 
 void button1() {
   /**
@@ -709,26 +765,41 @@ void button1() {
             menuOn = !menuOn;
             break;
           case 1:
-            // SETPOINT CONFIG
+            // START
             activeSubMenu = 1;
-            newSetpoint = setpoint;
+            newCycleState = cycleState;
             break;
           case 2:
-            // TOLERANCE CONFIG
-            activeSubMenu = 2;
-            newTolerance = tolerance;
+            // FORCE CYCLE ACTION CHANGE
+            if (cycleState == true){
+              activeSubMenu = 2;
+              newCurrentAction = currentAction;
+            }
+            else{
+              activeSubMenu = 0;
+            }
             break;
           case 3:
-            // DEFROST TIME CONFIG
+            // SETPOINT CONFIG
             activeSubMenu = 3;
-            newDefrostDuration = defrostDuration;
+            newSetpoint = setpoint;
             break;
           case 4:
-            // DEFROST FREQUENCY CONFIG
+            // TOLERANCE CONFIG
             activeSubMenu = 4;
-            newDefrostFrequency = defrostFrequency;
+            newTolerance = tolerance;
             break;
           case 5:
+            // DEFROST TIME CONFIG
+            activeSubMenu = 5;
+            newDefrostDuration = defrostDuration;
+            break;
+          case 6:
+            // DEFROST FREQUENCY CONFIG
+            activeSubMenu = 6;
+            newDefrostFrequency = defrostFrequency;
+            break;
+          case 7:
             // FORCE FANS ON/OFF
             if (fans == true){
               forceFans = 1;
@@ -736,9 +807,9 @@ void button1() {
             else {
               forceFans = 0;
             }
-            activeSubMenu = 5;
+            activeSubMenu = 7;
             break;
-          case 6:
+          case 8:
             // FORCE EVAPORATOR ON/OFF
             if (evaporator == true){
               forceEvaporator = 1;
@@ -747,9 +818,9 @@ void button1() {
               forceEvaporator = 0;
             }
             tempEvaporatorState = evaporator;
-            activeSubMenu = 6;
+            activeSubMenu = 8;
             break;
-          case 7:
+          case 9:
             // FORCE DEFROST ON/OFF
             if (fans == true){
               forceDefroster = 1;
@@ -758,9 +829,9 @@ void button1() {
               forceDefroster = 0;
             }
             tempDefrosterState = defroster;
-            activeSubMenu = 7;
+            activeSubMenu = 9;
             break;
-          case 8:
+          case 10:
             // SHUTDOWN
             break;
         }
@@ -770,52 +841,76 @@ void button1() {
         // will therefore behave as a config saver.
         switch (activeSubMenu) {
           case 1:
+            // START
+            cycleState = newCycleState;
+            if (cycleState = true){
+              evaporatorStopAt = millis() + (((defrostFrequency * 60.0) * 60.0) * 1000.0);
+              currentAction = true;
+            }
+            activeSubMenu = 0;
+            dirtySubMenu = true;
+            break;
+          case 2:
+            // FORCE CYCLE ACTION CHANGE
+            if (currentAction != newCurrentAction){
+              if (currentAction == false) {
+                forceDefrostCycle();
+              }
+              else{
+                forceFreezingCycle();
+              }
+            }
+              
+            activeSubMenu = 0;
+            dirtySubMenu = true;
+            break;
+          case 3:
             // INTERACT WITH SETPOINT CONFIG
             setpoint = newSetpoint;
             EEPROM.update(0, setpoint);
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
-          case 2:
+          case 4:
             // INTERACT WITH TOLERANCE CONFIG
             tolerance = newTolerance;
             EEPROM.update(1, tolerance);
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
-          case 3:
+          case 5:
             // INTERACT WITH DEFROST TIME CONFIG
             defrostDuration = newDefrostDuration;
             EEPROM.update(2, defrostDuration);
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
-          case 4:
+          case 6:
             // DEFROST FREQUENCY CONFIG
             defrostFrequency = newDefrostFrequency;
             EEPROM.update(3, defrostFrequency);
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
-          case 5:
+          case 7:
             // FORCE FANS ON/OFF
             forceFans = 2;
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
-          case 6:
+          case 8:
             // FORCE EVAPORATOR ON/OFF
             forceEvaporator = 2;
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
-          case 7:
+          case 9:
             // FORCE DEFROST ON/OFF
             forceDefroster = 2;
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
-          case 8:
+          case 10:
             // SHUTDOWN
             break;
         }
@@ -856,26 +951,36 @@ void button2() {
         // The button will therefore behave as a config editor.
         switch (activeSubMenu) {
           case 1:
+            // START
+            newCycleState = !newCycleState;
+            dirtySubMenu = true;
+            break;
+          case 2:
+            // FORCE CYCLE ACTION CHANGE
+            newCurrentAction = !newCurrentAction;
+            dirtySubMenu = true;
+            break;
+          case 3:
             // INTERACT WITH SETPOINT CONFIG
             newSetpoint = newSetpoint - 1;
             dirtySubMenu = true;
             break;
-          case 2:
+          case 4:
             // INTERACT WITH TOLERANCE CONFIG
             newTolerance = newTolerance - 1;
             dirtySubMenu = true;
             break;
-          case 3:
+          case 5:
             // INTERACT WITH DEFROST TIME CONFIG
             newDefrostDuration = newDefrostDuration - 1;
             dirtySubMenu = true;
             break;
-          case 4:
+          case 6:
             // DEFROST FREQUENCY CONFIG
             newDefrostFrequency = newDefrostFrequency - 1;
             dirtySubMenu = true;
             break;
-          case 5:
+          case 7:
             // FORCE FANS ON/OFF
             if (forceFans == 1) {
               forceFans = 0;
@@ -885,7 +990,7 @@ void button2() {
             }
             dirtySubMenu = true;
             break;
-          case 6:
+          case 8:
             // FORCE EVAPORATOR ON/OFF
             if (forceEvaporator == 1) {
               forceEvaporator = 0;
@@ -895,7 +1000,7 @@ void button2() {
             }
             dirtySubMenu = true;
             break;
-          case 7:
+          case 9:
             // FORCE DEFROST ON/OFF
             if (forceDefroster == 1) {
               forceDefroster = 0;
@@ -905,7 +1010,7 @@ void button2() {
             }
             dirtySubMenu = true;
             break;
-          case 8:
+          case 10:
             // SHUTDOWN
             break;
         }
@@ -947,26 +1052,36 @@ void button3() {
         // The button will therefore behave as a config editor.
         switch (activeSubMenu) {
           case 1:
+            // START
+            newCycleState = !newCycleState;
+            dirtySubMenu = true;
+            break;
+          case 2:
+            // FORCE CYCLE ACTION CHANGE
+            newCurrentAction = !newCurrentAction;
+            dirtySubMenu = true;
+            break;
+          case 3:
             // SETPOINT CONFIG
             newSetpoint = newSetpoint + 1;
             dirtySubMenu = true;
             break;
-          case 2:
+          case 4:
             // TOLERANCE CONFIG
             newTolerance = newTolerance + 1;
             dirtySubMenu = true;
             break;
-          case 3:
+          case 5:
             // INTERACT WITH DEFROST TIME CONFIG
             newDefrostDuration = newDefrostDuration + 1;
             dirtySubMenu = true;
             break;
-          case 4:
+          case 6:
             // DEFROST FREQUENCY CONFIG
             newDefrostFrequency = newDefrostFrequency + 1;
             dirtySubMenu = true;
             break;
-          case 5:
+          case 7:
             // FORCE FANS ON/OFF
             if (forceFans == 1) {
               forceFans = 0;
@@ -976,7 +1091,7 @@ void button3() {
             }
             dirtySubMenu = true;
             break;
-          case 6:
+          case 8:
             // FORCE EVAPORATOR ON/OFF
             if (forceEvaporator == 1) {
               forceEvaporator = 0;
@@ -986,7 +1101,7 @@ void button3() {
             }
             dirtySubMenu = true;
             break;
-          case 7:
+          case 9:
             // FORCE DEFROST ON/OFF
             if (forceDefroster == 1) {
               forceDefroster = 0;
@@ -996,7 +1111,7 @@ void button3() {
             }
             dirtySubMenu = true;
             break;
-          case 8:
+          case 10:
             // SHUTDOWN
             break;
         }
@@ -1023,40 +1138,106 @@ void showSubMenu(){
    */
   switch(activeSubMenu){
     case 1:
+      // Start config.
+      startConfig();
+      break;
+    case 2:
+      // Current action config.
+      currentActionConfig();
+      break;
+    case 3:
       // Setpoint config.
       setpointConfig();
       break;
-    case 2:
+    case 4:
       // Tolerance config.
       toleranceConfig();
       break;
-    case 3:
+    case 5:
       // Tolerance config.
       defrostDurationConfig();
       break;
-    case 4:
+    case 6:
       // Tolerance config.
       defrostFrequencyConfig();
       break;
-    case 5:
+    case 7:
       // Tolerance config.
       fansState();
       break;
-    case 6:
+    case 8:
       // Tolerance config.
       evaporatorState();
       break;
-    case 7:
+    case 9:
       // Tolerance config.
       defrosterState();
       break;
   }
 }
 
+void cycler(){
+  /**
+   * Activate and deactivate the relays according to the
+   * timers set by the user.
+   */
+  if (currentAction == false){
+    if (millis() <= evaporatorStopAt){
+      defrost(false);
+      tempControl();
+    }
+    else{
+      currentAction = true;
+      // The defroster is in MINUTES so we multiply the minutes by 60 to get the seconds
+      //   and then by 1000 to get the ms.
+      defrosterStopAt = millis() + ((defrostFrequency * 60.0) * 1000.0);
+    }
+  }
+  else{
+    if (millis() <= defrosterStopAt){
+      tempControl(false);
+      defrost(true);
+    }
+    else{
+      currentAction = false;
+      // The evaporator is in HOURS so we multiply the hours by 60 to get the minutes
+      //   and then by 60 again to get the seconds, and lastly by 1000 to get the ms.
+      evaporatorStopAt = millis() + (((defrostFrequency * 60.0) * 60.0) * 1000.0);
+    }
+  }
+}
+
+void forceDefrostCycle(){
+  /*
+   * If the user so desires, they can force start the defrost cycle during a running cycle.
+   */
+  if (currentAction == false){
+    currentAction = true;
+    evaporatorStopAt = millis();
+    defrosterStopAt = millis() + ((defrostFrequency * 60.0) * 1000.0);
+  }
+}
+
+void forceFreezingCycle(){
+  /*
+   * If the user so desires, they can force start the freezing cycle during a running cycle.
+   */
+  if (currentAction == true){
+    currentAction = false;
+    defrosterStopAt = millis();
+    evaporatorStopAt = millis() + (((defrostFrequency * 60.0) * 60.0) * 1000.0);
+  }
+}
+
 void loop() {
-  tempControl(setpoint, tolerance);
   relaysController();
-  button1();
+  if (cycleState == true){
+    cycler();
+  }
+  else{
+    tempControl(false);
+    defrost(false);
+  }
   if (menuOn == true) {
     if (activeSubMenu == 0) {
       homeClean = false;
@@ -1069,6 +1250,7 @@ void loop() {
     }
   }
   else {
+    button1();
     if (homeClean == false) {
       lcd.clear();
       homeClean = true;
