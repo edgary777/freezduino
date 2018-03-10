@@ -2,8 +2,8 @@
    Name     : Freezduino
    Author   : Edgar Solis Vizcarra
    Date     : 2018/03/04
-   Modified : 2018/03/09
-   Version  : V0.3.0
+   Modified : 2018/03/10
+   Version  : V0.3.1
    Notes    : Sketch designed for the control of a walk-in freezer evaporator.
       It takes input from a temperature sensor and uses it to control
       3 relays.
@@ -264,7 +264,6 @@ void setup() {
 TimedAction lcdTempThread = TimedAction(refreshRate, lcdTemp);
 TimedAction lcdDefrosterThread = TimedAction(refreshRate / 2, lcdDefrost);
 TimedAction lcdEvaporatorThread = TimedAction(refreshRate / 2, lcdEvaporator);
-
 
 void tempControl(bool state = true) {
   /**
@@ -839,6 +838,8 @@ void button1() {
       else{
         // If we are here that means that we are in a subMenu, and the button
         // will therefore behave as a config saver.
+        int diff;
+        unsigned long timeDiff;
         switch (activeSubMenu) {
           case 1:
             // START
@@ -880,15 +881,37 @@ void button1() {
             break;
           case 5:
             // INTERACT WITH DEFROST TIME CONFIG
+            diff = newDefrostDuration - defrostDuration;
             defrostDuration = newDefrostDuration;
             EEPROM.update(2, defrostDuration);
+            timeDiff = (abs(diff) * 60.0) * 1000.0;
+            if (currentAction == true) {
+              if (diff >= 0){
+                // if diff >= 0 then do a sum.
+                defrosterStopAt = defrosterStopAt + timeDiff;
+              }
+              else{
+                // else do a substraction.
+                defrosterStopAt = defrosterStopAt - timeDiff;
+              }
+            }
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
           case 6:
-            // DEFROST FREQUENCY CONFIG
+            // DEFROST FREQUENCY CONFI
+            diff = newDefrostFrequency - defrostFrequency;
             defrostFrequency = newDefrostFrequency;
             EEPROM.update(3, defrostFrequency);
+            timeDiff = ((abs(diff) * 60.0) * 60.0) * 1000.0;
+            if (currentAction == false) {
+              if (diff >= 0){
+                evaporatorStopAt = evaporatorStopAt + timeDiff;
+              }
+              else{
+                evaporatorStopAt = evaporatorStopAt - timeDiff;
+              }
+            }
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
@@ -935,7 +958,7 @@ void button2() {
       // therefore, we are in the main menu and the button will act as a selector mover.
       if (activeSubMenu == 0) {
         if (mainMenuCurrent - mainMenuTop != 0) {
-          if (mainMenuTop < 7) {
+          if (mainMenuTop < 10) {
             mainMenuTop = mainMenuTop + 1;
           }
           else {
@@ -1180,6 +1203,10 @@ void cycler(){
   /**
    * Activate and deactivate the relays according to the
    * timers set by the user.
+   * 
+   * currentAction == false when the freezing Cycle is on.
+   * 
+   * currentAction == true when the defroster Cycle is on.
    */
   if (currentAction == false){
     if (millis() <= evaporatorStopAt){
@@ -1190,7 +1217,7 @@ void cycler(){
       currentAction = true;
       // The defroster is in MINUTES so we multiply the minutes by 60 to get the seconds
       //   and then by 1000 to get the ms.
-      defrosterStopAt = millis() + ((defrostFrequency * 60.0) * 1000.0);
+      defrosterStopAt = millis() + ((defrostDuration * 60.0) * 1000.0);
     }
   }
   else{
