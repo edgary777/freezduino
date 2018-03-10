@@ -3,7 +3,7 @@
    Author   : Edgar Solis Vizcarra
    Date     : 2018/03/04
    Modified : 2018/03/10
-   Version  : V0.3.2
+   Version  : V0.3.3
    Notes    : Sketch designed for the control of a walk-in freezer evaporator.
       It takes input from a temperature sensor and uses it to control
       3 relays.
@@ -808,13 +808,41 @@ void menuScreen(int top, int current) {
    * 8- shutdown
    */
   if (dirtyMenu == true) {
-    char message [11][15] = {"REGRESAR", "INICIAR", "CAMBIAR ACCION", "TEMPERATURA", "TOLERANCIA", "TIEMPO DESCONG", "DESCONGELA CADA", "VENTILADORES", "DIFUSOR", "DESCONGELAR", "APAGAR"};
+    char message [10][15] = {"REGRESAR", "INICIAR", "CAMBIAR ACCION", "TEMPERATURA", "TOLERANCIA", "TIEMPO DESCONG", "DESCONGELA CADA", "VENTILADORES", "DIFUSOR", "DESCONGELAR"};
 
     lcd.clear();
     lcd.setCursor(1, 0);
-    lcd.print(message[top]);
+
+    // CHANGE MESSAGE IF CYCLE IS ON
+    if (top == 1){
+      if (cycleState == true){
+        lcd.print("APAGAR");
+      }
+      else{
+        lcd.print(message[top]);
+      }
+    }
+    else{
+      lcd.print(message[top]);
+    }
+    // FINISH CHANGING MESSAGE
+
     lcd.setCursor(1, 1);
-    lcd.print(message[top + 1]);
+
+    // CHANGE MESSAGE IF CYCLE IS ON
+    if (top + 1 == 1){
+      if (cycleState == true){
+      lcd.print("APAGAR");
+      }
+      else{
+        lcd.print(message[top + 1]);
+      }
+    }
+    else{
+      lcd.print(message[top + 1]);
+    }
+    // FINISH CHANGING MESSAGE
+    
     lcd.setCursor(0, current - top);
     lcd.write(byte(5));
 
@@ -906,9 +934,6 @@ void button1() {
             }
             tempDefrosterState = defroster;
             activeSubMenu = 9;
-            break;
-          case 10:
-            // SHUTDOWN
             break;
         }
       }
@@ -1010,9 +1035,6 @@ void button1() {
             activeSubMenu = 0;
             dirtySubMenu = true;
             break;
-          case 10:
-            // SHUTDOWN
-            break;
         }
       }
       dirtyMenu = true;
@@ -1035,7 +1057,7 @@ void button2() {
       // therefore, we are in the main menu and the button will act as a selector mover.
       if (activeSubMenu == 0) {
         if (mainMenuCurrent - mainMenuTop != 0) {
-          if (mainMenuTop < 10) {
+          if (mainMenuTop < 8) {
             mainMenuTop = mainMenuTop + 1;
           }
           else {
@@ -1109,9 +1131,6 @@ void button2() {
               forceDefroster = 1;
             }
             dirtySubMenu = true;
-            break;
-          case 10:
-            // SHUTDOWN
             break;
         }
       }
@@ -1210,9 +1229,6 @@ void button3() {
               forceDefroster = 1;
             }
             dirtySubMenu = true;
-            break;
-          case 10:
-            // SHUTDOWN
             break;
         }
       }
