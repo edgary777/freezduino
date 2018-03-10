@@ -3,7 +3,7 @@
    Author   : Edgar Solis Vizcarra
    Date     : 2018/03/04
    Modified : 2018/03/10
-   Version  : V0.3.1
+   Version  : V0.3.2
    Notes    : Sketch designed for the control of a walk-in freezer evaporator.
       It takes input from a temperature sensor and uses it to control
       3 relays.
@@ -54,6 +54,9 @@ int lcdEvaporatorRow, lcdEvaporatorColumn;
 
 //global variables to write the defroster status on the lcdscreen.
 int lcdDefrosterRow, lcdDefrosterColumn;
+
+//global variables to write the timer status on the lcdscreen.
+int lcdTimerRow, lcdTimerColumn;
 
 // initialize the LCD library by associating any needed LCD interface pin
 // with the arduino pin number it is connected to
@@ -264,6 +267,7 @@ void setup() {
 TimedAction lcdTempThread = TimedAction(refreshRate, lcdTemp);
 TimedAction lcdDefrosterThread = TimedAction(refreshRate / 2, lcdDefrost);
 TimedAction lcdEvaporatorThread = TimedAction(refreshRate / 2, lcdEvaporator);
+TimedAction lcdTimerThread = TimedAction(1000, lcdTimer);
 
 void tempControl(bool state = true) {
   /**
@@ -379,7 +383,67 @@ void relaysController(){
    defrosterController();
 }
 
-void lcdEvaporator(int row, int column) {
+void lcdTimer() {
+  /**
+     Write on the LCD the time left for the currentAction to finish.
+
+     It is written LTR starting on the selected row and column.
+     it displays hours, minutes and the currentAction.
+
+     it needs 7 spaces.
+  */
+  int hoursLeft, minutesLeft;
+  lcd.setCursor(lcdTimerColumn, lcdTimerRow);
+  if (cycleState == true){
+    lcd.write(byte(4));
+    if (currentAction == false){
+      // Display freeze cycle timer
+      hoursLeft = (((evaporatorStopAt - millis()) / 1000) / 60) / 60;
+      minutesLeft = (((evaporatorStopAt - millis()) / 1000) / 60) % 60;
+      if (hoursLeft < 10) {
+        lcd.print(0);
+        lcd.print(hoursLeft);
+      }
+      else{
+        lcd.print(hoursLeft);
+      }
+      lcd.print(":");
+      if (minutesLeft < 10){
+        lcd.print(0);
+        lcd.print(minutesLeft);
+      }
+      else{
+        lcd.print(minutesLeft);
+      }
+      lcd.write(byte(2));
+    }
+    else {
+      hoursLeft = (((defrosterStopAt - millis()) / 1000) / 60) / 60;
+      minutesLeft = (((defrosterStopAt - millis()) / 1000) / 60) % 60;
+      if (hoursLeft < 10) {
+        lcd.print(0);
+        lcd.print(hoursLeft);
+      }
+      else{
+        lcd.print(hoursLeft);
+      }
+      lcd.print(":");
+      if (minutesLeft < 10){
+        lcd.print(0);
+        lcd.print(minutesLeft);
+      }
+      else{
+        lcd.print(minutesLeft);
+      }      
+      lcd.write(byte(3));
+    }
+  }
+  else{
+    lcd.print("       ");
+  }
+}
+
+void lcdEvaporator() {
   /**
      Write the current state of the evaporator on the lcd display.
 
@@ -501,16 +565,29 @@ void updateDefrosterPos(int column, int row) {
   lcdDefrosterRow = row;
 }
 
+void updateTimerPos(int column, int row){
+  /*
+   * Because the timer is shown and updated with a timer,
+   * and because it can be reused, calling this function will
+   * set it to the set position.
+   */
+  lcdTimerColumn = column;
+  lcdTimerRow = row;
+  
+}
+
 void homeScreen() {
   /*
    * Update the homescreen data.
    */
   updateTempPos(0, 0, true);
-  updateEvaporatorPos(12, 0);
-  updateDefrosterPos(0, 1);
+  updateTimerPos(9, 0);
+  updateEvaporatorPos(0, 1);
+  updateDefrosterPos(12, 1);
   lcdTempThread.check();
   lcdEvaporatorThread.check();
   lcdDefrosterThread.check();
+  lcdTimerThread.check();
 }
 
 void startConfig() {
@@ -844,7 +921,7 @@ void button1() {
           case 1:
             // START
             cycleState = newCycleState;
-            if (cycleState = true){
+            if (cycleState == true){
               evaporatorStopAt = millis() + (((defrostFrequency * 60.0) * 60.0) * 1000.0);
               currentAction = true;
             }
@@ -1241,7 +1318,7 @@ void forceDefrostCycle(){
   if (currentAction == false){
     currentAction = true;
     evaporatorStopAt = millis();
-    defrosterStopAt = millis() + ((defrostFrequency * 60.0) * 1000.0);
+    defrosterStopAt = millis() + ((defrostDuration * 60.0) * 1000.0);
   }
 }
 
@@ -1258,6 +1335,7 @@ void forceFreezingCycle(){
 
 void loop() {
   relaysController();
+  Serial.println(cycleState);
   if (cycleState == true){
     cycler();
   }
