@@ -3,7 +3,7 @@
    Author   : Edgar Solis Vizcarra
    Date     : 2018/03/04
    Modified : 2018/03/10
-   Version  : V0.3.3
+   Version  : V0.3.4
    Notes    : Sketch designed for the control of a walk-in freezer evaporator.
       It takes input from a temperature sensor and uses it to control
       3 relays.
@@ -20,7 +20,9 @@
 
 #include <LiquidCrystal.h>
 #include <Wire.h>
-#include "Adafruit_MCP9808.h"
+//#include "Adafruit_MCP9808.h"
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BME280.h>
 #include <TimedAction.h>
 #include <EEPROM.h>
 
@@ -35,7 +37,7 @@ unsigned long b3Millis = 0;
 int mainMenuTop = 0;
 int mainMenuCurrent = 0;
 
-const int b1Pin = 24, b2Pin = 28, b3Pin = 32, b4Pin = 36;
+const int b1Pin = 24, b2Pin = 28, b3Pin = 32;
 const int Rcompressor = 6, Rfans = 7, Rdefroster = 8;
 
 int setpoint = (int8_t)EEPROM.read(0), tolerance = (int8_t)EEPROM.read(1);
@@ -57,6 +59,9 @@ int lcdDefrosterRow, lcdDefrosterColumn;
 
 //global variables to write the timer status on the lcdscreen.
 int lcdTimerRow, lcdTimerColumn;
+
+//global variables to write the moisture value on the lcdscreen.
+int lcdMoistureRow, lcdMoistureColumn;
 
 // initialize the LCD library by associating any needed LCD interface pin
 // with the arduino pin number it is connected to
@@ -124,8 +129,14 @@ int dirtyConfig;
 
 // initialize the temp sensor library, as it connects via I2C the pins are
 // defined in the library. SCL = A5 on UNO || D21 on MEGA SDA = A4 on UNO || D20
-// on MEGA vdd = 5v gnd = gnd the other pins are not needed.
-Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
+// on MEGA vdd = 5v gnd = gnd, the other pins are not needed.
+// Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
+
+// initialize the temp sensor library, as it connects via I2C the pins are
+// defined in the library. SCL = A5 on UNO || D21 on MEGA SDA = A4 on UNO || D20
+// on MEGA vdd = 5v gnd = gnd
+Adafruit_BME280 bme; // I2C
+
 
 // Custom characters for the lcd.
 byte thermometer[8] = {
@@ -205,9 +216,20 @@ byte toleranceC[8]{
   0b00000
 };
 
-void setup() {
-  Serial.begin(9600);
+byte moisture[8] = {
+  0b00100,
+  0b00100,
+  0b01110,
+  0b01110,
+  0b11111,
+  0b11101,
+  0b11001,
+  0b01110
+};
 
+void setup() {
+
+  Serial.begin(9600);
   // Initial EEPROM setup.
   if (EEPROM.read(0) == 255){
     // Setpoint
@@ -221,29 +243,32 @@ void setup() {
   }
     // Negative values can be stored rather easily, but reading
     // them requires we read them slightly differently.
-    int value = (int8_t)EEPROM.read(0);
-    Serial.println(value);
-    Serial.println(EEPROM.read(1));
-    Serial.println(EEPROM.read(2));
-    Serial.println(EEPROM.read(3));
+//    int value = (int8_t)EEPROM.read(0);
+//    Serial.println(value);
+//    Serial.println(EEPROM.read(1));
+//    Serial.println(EEPROM.read(2));
+//    Serial.println(EEPROM.read(3));
 
   pinMode(Rcompressor, OUTPUT);
   digitalWrite(Rcompressor, HIGH);
   pinMode(Rfans, OUTPUT);
   digitalWrite(Rfans, HIGH);
   pinMode(Rdefroster, OUTPUT);
-  digitalWrite(Rdefroster, HIGH);
+  digitalWrite(Rdefroster, LOW);
 
   pinMode(b1Pin, INPUT);
   pinMode(b2Pin, INPUT);
   pinMode(b3Pin, INPUT);
-  pinMode(b4Pin, INPUT);
 
   // initialize LCD and set up the number of columns and rows:
   lcd.begin(16, 2);
 
   // Check if the temp sensor is connected.
-  if (!tempsensor.begin()) {
+
+
+// This is for the BME280 sensor
+  if (!bme.begin()) {
+    Serial.println("sensor no conectado");
     // The temperature sensor was not found, send error message.
     lcd.setCursor(0, 0);
     lcd.print("Sensor no");
@@ -251,6 +276,17 @@ void setup() {
     lcd.print("conectado!");
     while (1); // loop until reset.
   }
+
+//  This is for the MCP sensor
+//  if (!tempsensor.begin()) {
+//    Serial.println("sensor no conectado");
+//    // The temperature sensor was not found, send error message.
+//    lcd.setCursor(0, 0);
+//    lcd.print("Sensor no");
+//    lcd.setCursor(0, 1);
+//    lcd.print("conectado!");
+//    while (1); // loop until reset.
+//  }
 
   // create new characters
   lcd.createChar(0, thermometer);
@@ -260,6 +296,7 @@ void setup() {
   lcd.createChar(4, timer);
   lcd.createChar(5, arrow);
   lcd.createChar(6, toleranceC);
+  lcd.createChar(7, moisture);
 }
 
 
@@ -268,6 +305,7 @@ TimedAction lcdTempThread = TimedAction(refreshRate, lcdTemp);
 TimedAction lcdDefrosterThread = TimedAction(refreshRate / 2, lcdDefrost);
 TimedAction lcdEvaporatorThread = TimedAction(refreshRate / 2, lcdEvaporator);
 TimedAction lcdTimerThread = TimedAction(1000, lcdTimer);
+TimedAction lcdMoistureThread =TimedAction(1000, lcdMoisture);
 
 void tempControl(bool state = true) {
   /**
@@ -276,7 +314,7 @@ void tempControl(bool state = true) {
      tolerance then turn the relay on.
   */
   if (state == true){
-    int temp = round(tempsensor.readTempC()); // round temperature reading.
+    int temp = round(bme.readTemperature()); // round temperature reading.
     if (temp <= setpoint + tolerance) {
       evaporator = true;
       fans = true;
@@ -310,7 +348,7 @@ void defrost(bool state = false) {
 
 void fansController(){
   /*
-   * Controls the relay of the evaporator.
+   * Controls the relay of the fans.
    */
   if (forceFans != 2){
     if (forceFans == 1) {
@@ -354,22 +392,24 @@ void evaporatorController(){
 
 void defrosterController(){
   /*
-   * Controls the relay of the evaporator.
+   * Controls the relay of the defroster.
+   * 
+   * This relay works different that's why the signals are inverted
    */
   if (forceDefroster != 2){
     if (forceDefroster == 1) {
-      digitalWrite(Rdefroster, LOW);
+      digitalWrite(Rdefroster, HIGH);
     }
     else{
-      digitalWrite(Rdefroster, HIGH);
+      digitalWrite(Rdefroster, LOW);
     }
   }
   else{
     if (defroster == true) {
-      digitalWrite(Rdefroster, LOW);
+      digitalWrite(Rdefroster, HIGH);
     }
     else{
-      digitalWrite(Rdefroster, HIGH);
+      digitalWrite(Rdefroster, LOW);
     }    
   }
 }
@@ -497,16 +537,31 @@ void lcdTemp() {
   if (lcdTempPrecise == true) {
     lcd.print("      ");
     lcd.setCursor(lcdTempColumn, lcdTempRow);
-    float ftemp = tempsensor.readTempC(); // read temp without rounding
+    float ftemp = bme.readTemperature(); // read temp without rounding
     lcd.print(ftemp);                     // write temp
   } else {
     lcd.print("   ");
     lcd.setCursor(lcdTempColumn, lcdTempRow);
-    int itemp = round(tempsensor.readTempC()); // round temperature reading.
+    int itemp = round(bme.readTemperature()); // round temperature reading.
     lcd.print(itemp);                          // write temp
   }
   lcd.write(byte(1)); // degree character
   lcd.print("C");
+}
+
+void lcdMoisture() {
+  /**
+     Write the current moisture reading on the lcd display.
+
+     It is written LTR starting on the selected row and column.
+     it displays a percentage.
+
+     it needs 5 spaces.
+  */
+  lcd.setCursor(lcdMoistureColumn, lcdMoistureRow);
+  lcd.write(byte(7));
+  lcd.print(round(bme.readHumidity()));
+  lcd.print("%");
 }
 
 void checkTempSensor() {
@@ -516,16 +571,28 @@ void checkTempSensor() {
      If it is connected do nothing, if it is not connected stop everything.
   */
 
-  if (!tempsensor.begin()) {
+  if (!bme.begin()) {
     lcd.clear();
     // The temperature sensor was not found, send error message.
     lcd.setCursor(0, 0);
     lcd.print("Sensor no");
     lcd.setCursor(0, 1);
     lcd.print("conectado!");
-    while (!tempsensor.begin()) {
+    while (!bme.begin()) {
     }
   }
+
+  
+//  if (!tempsensor.begin()) {
+//    lcd.clear();
+//    // The temperature sensor was not found, send error message.
+//    lcd.setCursor(0, 0);
+//    lcd.print("Sensor no");
+//    lcd.setCursor(0, 1);
+//    lcd.print("conectado!");
+//    while (!tempsensor.begin()) {
+//    }
+//  }
 }
 
 void killAll() {
@@ -576,18 +643,31 @@ void updateTimerPos(int column, int row){
   
 }
 
-void homeScreen() {
+void updateMoisturePos(int column, int row){
   /*
+   * Because the timer is shown and updated with a timer,
+   * and because it can be reused, calling this function will
+   * set it to the set position.
+   */
+  lcdMoistureColumn = column;
+  lcdMoistureRow = row;
+  
+}
+
+void homeScreen() {
+  /*  
    * Update the homescreen data.
    */
   updateTempPos(0, 0, true);
   updateTimerPos(9, 0);
-  updateEvaporatorPos(0, 1);
+  updateEvaporatorPos(6, 1);
   updateDefrosterPos(12, 1);
+  updateMoisturePos(0, 1);
   lcdTempThread.check();
   lcdEvaporatorThread.check();
   lcdDefrosterThread.check();
   lcdTimerThread.check();
+  lcdMoistureThread.check();
 }
 
 void startConfig() {
@@ -1351,7 +1431,6 @@ void forceFreezingCycle(){
 
 void loop() {
   relaysController();
-  Serial.println(cycleState);
   if (cycleState == true){
     cycler();
   }
