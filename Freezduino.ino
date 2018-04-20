@@ -307,20 +307,28 @@ TimedAction lcdEvaporatorThread = TimedAction(refreshRate / 2, lcdEvaporator);
 TimedAction lcdTimerThread = TimedAction(1000, lcdTimer);
 TimedAction lcdMoistureThread =TimedAction(1000, lcdMoisture);
 
+bool tempReached = false;
+
 void tempControl(bool state = true) {
   /**
      Check temperature, if it is at the setpoint or lower, or higher but within
      the tolerance then turn relay off. If it is higher than the setpoint + the
-     tolerance then turn the relay on.
+     tolerance then turn the relay on untili it isn't.
   */
   if (state == true){
     int temp = round(bme.readTemperature()); // round temperature reading.
-    if (temp <= setpoint + tolerance) {
-      evaporator = true;
-      fans = true;
+    if (tempReached == true) {
+      if (temp >= setpoint + tolerance) {
+        tempReached = false;
+        evaporator = true;
+        fans = true;
+      }
     } else {
-      evaporator = false;
-      fans = false;
+      if (temp <= setpoint) {
+        tempReached = true;
+        evaporator = false;
+        fans = false;
+      }
     }
   }
   else{
